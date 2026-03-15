@@ -10,15 +10,15 @@ Orquesta un ciclo completo de comprobación de precios:
 
 from datetime import date
 
-from config import obtener_logger
-from database import ya_alertado, obtener_simbolos_activos, guardar_alerta
-from notifications import (
+from .config import obtener_logger
+from .database import ya_alertado, obtener_simbolos_activos, guardar_alerta
+from .notifications import (
     construir_html_email,
     construir_mensaje_telegram,
     enviar_email,
     enviar_telegram,
 )
-from prices import obtener_variacion_precio
+from .prices import obtener_variacion_precio
 
 
 

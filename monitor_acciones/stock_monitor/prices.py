@@ -15,7 +15,9 @@ from typing import Optional
 
 import yfinance as yf
 
-from config import obtener_logger
+from .config import obtener_logger
+
+
 
 
 log = obtener_logger(__name__)

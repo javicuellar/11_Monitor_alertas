@@ -9,7 +9,7 @@ Todos los demás módulos importan desde aquí — ninguno toca sqlite3 directam
 import sqlite3
 from typing import Optional
 
-from config import RUTA_BD, obtener_logger
+from .config import RUTA_BD, obtener_logger
 
 
 

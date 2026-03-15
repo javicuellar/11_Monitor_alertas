@@ -18,9 +18,10 @@ solo_laborables   – 1 = omitir sáb y dom, 0 = ejecutar todos los días (por d
 import time
 from datetime import datetime
 
-from alerts import ejecutar_comprobacion
-from config import obtener_logger
-from database import obtener_config_planificador
+from .alerts import ejecutar_comprobacion
+from .config import obtener_logger
+from .database import obtener_config_planificador
+
 
 
 log = obtener_logger(__name__)

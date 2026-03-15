@@ -13,8 +13,8 @@ from email.mime.text import MIMEText
 
 import requests
 
-from config import obtener_logger
-from database import obtener_config_email, obtener_config_telegram
+from .config import obtener_logger
+from .database import obtener_config_email, obtener_config_telegram
 
 
 
