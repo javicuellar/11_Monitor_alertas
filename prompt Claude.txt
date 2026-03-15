@@ -1,0 +1,2 @@
+Hola, crea un programa Python que me avise por mail y Telegram si el precio de un  grupo de acciones y ETFs baja o sube en el día más de un 2%.
+y quiero que la configuración este en tablas sqlite. Y cuando esté todo hecho que lo prepares para usarlo en un contenedor docker con su fichero de creacion yaml
