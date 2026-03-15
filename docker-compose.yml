@@ -1,14 +1,4 @@
-# ── docker-compose.yml ────────────────────────────────────────────────────────
-# Stock & ETF Price Monitor
-#
-# Uso rápido:
-#   docker compose up -d
-#   docker compose exec monitor python manage.py set-email --host smtp.gmail.com \
-#     --port 587 --user you@gmail.com --pass APP_PASS --from you@gmail.com --to dest@mail.com
-#   docker compose exec monitor python manage.py set-telegram --token TOKEN --chat CHAT_ID
-#   docker compose exec monitor python manage.py enable-email
-#   docker compose exec monitor python manage.py enable-telegram
-
+#  Monitor de acciones con alertas por email y Telegram
 services:
   monitor:
     build:
@@ -23,20 +13,20 @@ services:
       DB_PATH: /data/monitor.db
 
       # ── Optional: override via environment instead of manage.py ──────────
-      # SMTP_HOST: smtp.gmail.com
-      # SMTP_PORT: "587"
-      # SMTP_USER: you@gmail.com
-      # SMTP_PASS: your_app_password
-      # SMTP_FROM: you@gmail.com
-      # SMTP_TO:   recipient@email.com
-      # TG_TOKEN:  123456:ABC-your-bot-token
-      # TG_CHAT:   "-100xxxxxxxxx"
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: "587"
+      SMTP_USER: you@gmail.com
+      SMTP_PASS: your_app_password
+      SMTP_FROM: you@gmail.com
+      SMTP_TO:   recipient@email.com
+      TG_TOKEN:  123456:ABC-your-bot-token
+      TG_CHAT:   "-100xxxxxxxxx"
 
     volumes:
       # Persist the SQLite database outside the container
       - ./data:/data
       # Optional: mount logs to host
-      - ./logs:/log
+      - ./logs:/var/log
 
     # Health check: verify the DB exists
     healthcheck:
