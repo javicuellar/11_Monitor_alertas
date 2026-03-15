@@ -1,89 +1,97 @@
 """
 database.py
 ───────────
-SQLite connection, schema initialisation, and all data-access functions.
+Conexión SQLite, inicialización del esquema y todas las funciones de acceso a datos.
 
-All other modules import from here — none of them touch sqlite3 directly.
+Todos los demás módulos importan desde aquí — ninguno toca sqlite3 directamente.
 """
 
 import sqlite3
 from typing import Optional
 
-from config import DB_PATH, get_logger
+from config import RUTA_BD, obtener_logger
 
 
 
-log = get_logger(__name__)
 
-# ── Connection ────────────────────────────────────────────────────────────────
+log = obtener_logger(__name__)
 
-def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+
+# ── Conexión ──────────────────────────────────────────────────────────────────
+
+def obtener_conexion() -> sqlite3.Connection:
+    """Devuelve una conexión a la base de datos SQLite."""
+    try:
+        conn = sqlite3.connect(RUTA_BD)
+    except sqlite3.Error as exc:
+        log.error("Error al conectar con la base de datos: %s", exc)
+        exit(1)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-# ── Schema ────────────────────────────────────────────────────────────────────
+# ── Esquema ───────────────────────────────────────────────────────────────────
 
-_SCHEMA = """
--- Email configuration
-CREATE TABLE IF NOT EXISTS email_config (
-    id          INTEGER PRIMARY KEY,
-    smtp_host   TEXT    NOT NULL,
-    smtp_port   INTEGER NOT NULL DEFAULT 587,
-    username    TEXT    NOT NULL,
-    password    TEXT    NOT NULL,
-    from_addr   TEXT    NOT NULL,
-    to_addr     TEXT    NOT NULL,
-    enabled     INTEGER NOT NULL DEFAULT 1
-);
-
--- Telegram configuration
-CREATE TABLE IF NOT EXISTS telegram_config (
-    id          INTEGER PRIMARY KEY,
-    bot_token   TEXT NOT NULL,
-    chat_id     TEXT NOT NULL,
-    enabled     INTEGER NOT NULL DEFAULT 1
-);
-
--- Scheduler configuration
---   interval_minutes : minutes between each price check
---   start_time       : earliest time to run a check (HH:MM, 24 h)
---   end_time         : latest  time to run a check (HH:MM, 24 h)
---   weekdays_only    : 1 = skip Saturday & Sunday, 0 = run every day
-CREATE TABLE IF NOT EXISTS scheduler_config (
+_ESQUEMA = """
+-- Configuración del email
+CREATE TABLE IF NOT EXISTS configuracion_email (
     id                INTEGER PRIMARY KEY,
-    interval_minutes  INTEGER NOT NULL DEFAULT 30,
-    start_time        TEXT    NOT NULL DEFAULT '09:00',
-    end_time          TEXT    NOT NULL DEFAULT '22:00',
-    weekdays_only     INTEGER NOT NULL DEFAULT 1
+    servidor_smtp     TEXT    NOT NULL,
+    puerto_smtp       INTEGER NOT NULL DEFAULT 587,
+    usuario           TEXT    NOT NULL,
+    password          TEXT    NOT NULL,
+    direccion_origen  TEXT   NOT NULL,
+    direccion_destino TEXT  NOT NULL,
+    activo            INTEGER NOT NULL DEFAULT 1
 );
 
--- Symbols to monitor
-CREATE TABLE IF NOT EXISTS symbols (
+-- Configuración de Telegram
+CREATE TABLE IF NOT EXISTS configuracion_telegram (
+    id              INTEGER PRIMARY KEY,
+    token_bot       TEXT NOT NULL,
+    id_chat         TEXT NOT NULL,
+    activo          INTEGER NOT NULL DEFAULT 1
+);
+
+
+-- Configuración del planificador
+--   intervalo_minutos : minutos entre cada comprobación de precios
+--   hora_inicio       : hora más temprana para ejecutar (HH:MM, 24 h)
+--   hora_fin          : hora más tardía para ejecutar   (HH:MM, 24 h)
+--   solo_laborables   : 1 = saltar sábado y domingo, 0 = ejecutar todos los días
+CREATE TABLE IF NOT EXISTS configuracion_planificador (
+    id                  INTEGER PRIMARY KEY,
+    intervalo_minutos   INTEGER NOT NULL DEFAULT 30,
+    hora_inicio         TEXT    NOT NULL DEFAULT '09:00',
+    hora_fin            TEXT    NOT NULL DEFAULT '22:00',
+    solo_laborables     INTEGER NOT NULL DEFAULT 1
+);
+
+-- Símbolos a monitorizar
+CREATE TABLE IF NOT EXISTS simbolos (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     ticker      TEXT    NOT NULL UNIQUE,
-    name        TEXT,
-    threshold   REAL    NOT NULL DEFAULT 2.0,
-    active      INTEGER NOT NULL DEFAULT 1
+    nombre      TEXT,
+    umbral      REAL    NOT NULL DEFAULT 2.0,
+    activo      INTEGER NOT NULL DEFAULT 1
 );
 
--- Alert history
-CREATE TABLE IF NOT EXISTS alert_history (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    ticker          TEXT NOT NULL,
-    alert_date      TEXT NOT NULL,
-    prev_close      REAL,
-    current_price   REAL,
-    change_pct      REAL,
-    direction       TEXT,
-    notified_email  INTEGER DEFAULT 0,
-    notified_tg     INTEGER DEFAULT 0,
-    created_at      TEXT DEFAULT (datetime('now'))
+-- Historial de alertas
+CREATE TABLE IF NOT EXISTS historial_alertas (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker              TEXT NOT NULL,
+    fecha_alerta        TEXT NOT NULL,
+    cierre_anterior     REAL,
+    precio_actual       REAL,
+    cambio_porcentaje   REAL,
+    direccion           TEXT,
+    notificado_email    INTEGER DEFAULT 0,
+    notificado_telegram INTEGER DEFAULT 0,
+    creado_en           TEXT DEFAULT (datetime('now'))
 );
 """
 
-_DEFAULT_SYMBOLS = [
+_SIMBOLOS_INICIALES = [
     ("SPY",  "SPDR S&P 500 ETF",  2.0),
     ("QQQ",  "Invesco QQQ ETF",   2.0),
     ("AAPL", "Apple Inc.",        2.0),
@@ -93,116 +101,123 @@ _DEFAULT_SYMBOLS = [
 
 
 
-def init_db() -> None:
-    """Create tables (if absent) and populate default seed rows."""
-    with get_conn() as conn:
-        conn.executescript(_SCHEMA)
+def inicializar_bd() -> None:
+    """Crea las tablas (si no existen) y rellena los datos iniciales por defecto."""
+    with obtener_conexion() as conn:
+        conn.executescript(_ESQUEMA)
 
-        if not conn.execute("SELECT 1 FROM scheduler_config LIMIT 1").fetchone():
+        if not conn.execute("SELECT 1 FROM configuracion_planificador LIMIT 1").fetchone():
             conn.execute(
-                "INSERT INTO scheduler_config "
-                "(interval_minutes, start_time, end_time, weekdays_only) "
+                "INSERT INTO configuracion_planificador "
+                "(intervalo_minutos, hora_inicio, hora_fin, solo_laborables) "
                 "VALUES (30, '09:00', '22:00', 1)"
             )
 
-        if not conn.execute("SELECT 1 FROM email_config LIMIT 1").fetchone():
+        if not conn.execute("SELECT 1 FROM configuracion_email LIMIT 1").fetchone():
             conn.execute(
-                "INSERT INTO email_config "
-                "(smtp_host, smtp_port, username, password, from_addr, to_addr, enabled) "
-                "VALUES ('smtp.gmail.com', 587, 'your@gmail.com', 'your_app_password', "
-                "        'your@gmail.com', 'recipient@email.com', 0)"
+                "INSERT INTO configuracion_email "
+                "(servidor_smtp, puerto_smtp, usuario, password, "
+                " direccion_origen, direccion_destino, activo) "
+                "VALUES ('smtp.gmail.com', 587, 'tu@gmail.com', 'tu_password_app', "
+                "        'tu@gmail.com', 'destinatario@email.com', 0)"
             )
 
-        if not conn.execute("SELECT 1 FROM telegram_config LIMIT 1").fetchone():
+        if not conn.execute("SELECT 1 FROM configuracion_telegram LIMIT 1").fetchone():
             conn.execute(
-                "INSERT INTO telegram_config (bot_token, chat_id, enabled) "
-                "VALUES ('YOUR_BOT_TOKEN', 'YOUR_CHAT_ID', 0)"
+                "INSERT INTO configuracion_telegram (token_bot, id_chat, activo) "
+                "VALUES ('TU_TOKEN_BOT', 'TU_ID_CHAT', 0)"
             )
 
-        for ticker, name, threshold in _DEFAULT_SYMBOLS:
-            conn.execute(
-                "INSERT OR IGNORE INTO symbols (ticker, name, threshold) VALUES (?,?,?)",
-                (ticker, name, threshold),
-            )
+        if not conn.execute("SELECT 1 FROM simbolos LIMIT 1").fetchone():
+            for ticker, nombre, umbral in _SIMBOLOS_INICIALES:
+                conn.execute(
+                    "INSERT OR IGNORE INTO simbolos (ticker, nombre, umbral) VALUES (?,?,?)",
+                    (ticker, nombre, umbral),
+                )
 
-    log.info("Database initialised at %s", DB_PATH)
+    log.info("Base de datos inicializada en %s", RUTA_BD)
 
 
 
+# ── Configuración del planificador ────────────────────────────────────────────
 
-# ── Scheduler config ──────────────────────────────────────────────────────────
-
-def get_scheduler_config() -> dict:
-    """Return scheduler settings from DB (safe defaults if missing)."""
-    with get_conn() as conn:
-        row = conn.execute("SELECT * FROM scheduler_config LIMIT 1").fetchone()
-    if row:
+def obtener_config_planificador() -> dict:
+    """Devuelve la configuración del planificador desde la BD (con valores por defecto si falta)."""
+    with obtener_conexion() as conn:
+        fila = conn.execute("SELECT * FROM configuracion_planificador LIMIT 1").fetchone()
+    if fila:
         return {
-            "interval_minutes": int(row["interval_minutes"]),
-            "start_time":       row["start_time"],
-            "end_time":         row["end_time"],
-            "weekdays_only":    bool(row["weekdays_only"]),
+            "intervalo_minutos": int(fila["intervalo_minutos"]),
+            "hora_inicio":       fila["hora_inicio"],
+            "hora_fin":          fila["hora_fin"],
+            "solo_laborables":   bool(fila["solo_laborables"]),
         }
-    return {"interval_minutes": 30, "start_time": "09:00",
-            "end_time": "22:00", "weekdays_only": True}
+    return {
+        "intervalo_minutos": 30,
+        "hora_inicio": "09:00",
+        "hora_fin": "22:00",
+        "solo_laborables": True,
+    }
 
 
 
+# ── Configuraciones de notificación ──────────────────────────────────────────
 
-# ── Notification configs ──────────────────────────────────────────────────────
-
-def get_email_config() -> Optional[sqlite3.Row]:
-    with get_conn() as conn:
+def obtener_config_email() -> Optional[sqlite3.Row]:
+    """Devuelve la configuración de email activa, o None si no existe."""
+    with obtener_conexion() as conn:
         return conn.execute(
-            "SELECT * FROM email_config WHERE enabled=1 LIMIT 1"
+            "SELECT * FROM configuracion_email WHERE activo=1 LIMIT 1"
         ).fetchone()
 
 
-def get_telegram_config() -> Optional[sqlite3.Row]:
-    with get_conn() as conn:
+
+def obtener_config_telegram() -> Optional[sqlite3.Row]:
+    """Devuelve la configuración de Telegram activa, o None si no existe."""
+    with obtener_conexion() as conn:
         return conn.execute(
-            "SELECT * FROM telegram_config WHERE enabled=1 LIMIT 1"
+            "SELECT * FROM configuracion_telegram WHERE activo=1 LIMIT 1"
         ).fetchone()
 
 
 
 
-# ── Symbols ───────────────────────────────────────────────────────────────────
+# ── Símbolos ──────────────────────────────────────────────────────────────────
 
-def get_active_symbols() -> list[sqlite3.Row]:
-    with get_conn() as conn:
+def obtener_simbolos_activos() -> list[sqlite3.Row]:
+    """Devuelve todos los símbolos con activo=1."""
+    with obtener_conexion() as conn:
         return conn.execute(
-            "SELECT ticker, name, threshold FROM symbols WHERE active=1"
+            "SELECT ticker, nombre, umbral FROM simbolos WHERE activo=1"
         ).fetchall()
 
 
 
+# ── Historial de alertas ──────────────────────────────────────────────────────
 
-# ── Alert history ─────────────────────────────────────────────────────────────
-
-def already_alerted(ticker: str, alert_date: str) -> bool:
-    """Return True if an alert was already recorded for this ticker today."""
-    with get_conn() as conn:
-        row = conn.execute(
-            "SELECT id FROM alert_history WHERE ticker=? AND alert_date=?",
-            (ticker, alert_date),
+def ya_alertado(ticker: str, fecha_alerta: str) -> bool:
+    """Devuelve True si ya se registró una alerta para este ticker hoy."""
+    with obtener_conexion() as conn:
+        fila = conn.execute(
+            "SELECT id FROM historial_alertas WHERE ticker=? AND fecha_alerta=?",
+            (ticker, fecha_alerta),
         ).fetchone()
-    return row is not None
+    return fila is not None
 
 
 
-def save_alert(data: dict, notified_email: bool, notified_tg: bool) -> None:
-    """Persist a triggered alert to the history table."""
-    with get_conn() as conn:
+def guardar_alerta(datos: dict, notificado_email: bool, notificado_telegram: bool) -> None:
+    """Persiste una alerta disparada en la tabla de historial."""
+    with obtener_conexion() as conn:
         conn.execute(
-            "INSERT INTO alert_history "
-            "(ticker, alert_date, prev_close, current_price, change_pct, "
-            " direction, notified_email, notified_tg) "
+            "INSERT INTO historial_alertas "
+            "(ticker, fecha_alerta, cierre_anterior, precio_actual, cambio_porcentaje, "
+            " direccion, notificado_email, notificado_telegram) "
             "VALUES (?,?,?,?,?,?,?,?)",
             (
-                data["ticker"],      data["date"],
-                data["prev_close"],  data["current"],
-                data["change_pct"],  data["direction"],
-                int(notified_email), int(notified_tg),
+                datos["ticker"],           datos["fecha"],
+                datos["cierre_anterior"],  datos["precio_actual"],
+                datos["cambio_porcentaje"], datos["direccion"],
+                int(notificado_email),     int(notificado_telegram),
             ),
         )

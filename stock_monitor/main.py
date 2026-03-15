@@ -2,51 +2,49 @@
 """
 main.py
 ───────
-Entry point for the Stock & ETF Price Monitor.
+Punto de entrada del Monitor de Precios de Acciones y ETFs.
 
-Usage
-─────
-    python main.py            # start the scheduler loop (default)
-    python main.py --once     # run a single check cycle and exit
+Uso
+───
+    python main.py            # inicia el bucle del planificador (por defecto)
+    python main.py --una-vez  # ejecuta un solo ciclo de comprobación y sale
 
-Environment variables
-─────────────────────
-    DB_PATH   path to the SQLite database file  (default: /data/monitor.db)
+Variables de entorno
+────────────────────
+    RUTA_BD   ruta al fichero de base de datos SQLite  (por defecto: /data/monitor.db)
 """
 
 import argparse
 import sys
 
-from database import init_db
-from alerts import run_check
-from scheduler import run_scheduler
+from database import inicializar_bd
+from alerts import ejecutar_comprobacion
+from scheduler import ejecutar_planificador
 
 
 
-
-def parse_args() -> argparse.Namespace:
+def parsear_argumentos() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Monitor de precios de acciones y ETFs",
     )
     parser.add_argument(
-        "--once",
+        "--una-vez",
         action="store_true",
-        help="Run a single check cycle and exit (useful for cron jobs)",
+        help="Ejecuta un solo ciclo de comprobación y sale (útil para trabajos cron)",
     )
     return parser.parse_args()
 
 
 
 def main() -> None:
-    args = parse_args()
-    print("args:", args)
-    init_db()
+    args = parsear_argumentos()
+    inicializar_bd()
 
-    if args.once:
-        run_check()
+    if args.una_vez:
+        ejecutar_comprobacion()
         sys.exit(0)
     else:
-        run_scheduler()
+        ejecutar_planificador()
 
 
 

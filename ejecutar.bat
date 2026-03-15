@@ -5,7 +5,7 @@ echo off
 :: entrypoint.bat – Iniciar BD y ejecutar el monitor de acciones
 
 :: Definición de variables de entorno
-SET DB_PATH=.\data\monitor.db
+SET RUTA_BD=.\data\monitor.db
 
 SET DIA=%DATE:~0,2%
 SET MES=%DATE:~3,2%

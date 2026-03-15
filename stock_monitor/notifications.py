@@ -1,8 +1,9 @@
 """
 notifications.py
 ────────────────
-Email and Telegram notification senders, plus the HTML / plain-text
-message builders that format alert data for each channel.
+Funciones de envío de notificaciones por email y Telegram, junto con los
+constructores de mensajes HTML y texto plano que dan formato a los datos
+de alerta para cada canal.
 """
 
 import smtplib
@@ -12,37 +13,36 @@ from email.mime.text import MIMEText
 
 import requests
 
-from config import get_logger
-from database import get_email_config, get_telegram_config
+from config import obtener_logger
+from database import obtener_config_email, obtener_config_telegram
 
 
 
-log = get_logger(__name__)
+log = obtener_logger(__name__)
 
 
+# ── Constructores de mensajes ─────────────────────────────────────────────────
 
-# ── Message builders ──────────────────────────────────────────────────────────
-
-def build_email_html(alerts: list[dict]) -> str:
-    """Render an HTML table summarising all triggered alerts."""
-    rows = ""
-    for a in alerts:
-        color = "#c0392b" if a["change_pct"] < 0 else "#27ae60"
-        rows += (
+def construir_html_email(alertas: list[dict]) -> str:
+    """Genera una tabla HTML con todas las alertas disparadas."""
+    filas = ""
+    for a in alertas:
+        color = "#c0392b" if a["cambio_porcentaje"] < 0 else "#27ae60"
+        filas += (
             f"<tr>"
             f"<td style='padding:8px;border:1px solid #ddd'><b>{a['ticker']}</b></td>"
-            f"<td style='padding:8px;border:1px solid #ddd'>{a['prev_close']:.2f}</td>"
-            f"<td style='padding:8px;border:1px solid #ddd'>{a['current']:.2f}</td>"
+            f"<td style='padding:8px;border:1px solid #ddd'>{a['cierre_anterior']:.2f}</td>"
+            f"<td style='padding:8px;border:1px solid #ddd'>{a['precio_actual']:.2f}</td>"
             f"<td style='padding:8px;border:1px solid #ddd;color:{color}'>"
-            f"  {a['direction']} {abs(a['change_pct']):.2f}%"
+            f"  {a['direccion']} {abs(a['cambio_porcentaje']):.2f}%"
             f"</td>"
             f"</tr>"
         )
 
-    today = date.today().strftime("%d/%m/%Y")
+    hoy = date.today().strftime("%d/%m/%Y")
     return f"""
     <html><body>
-    <h2 style="font-family:Arial">📈 Alerta de Precio – {today}</h2>
+    <h2 style="font-family:Arial">📈 Alerta de Precio – {hoy}</h2>
     <table style="border-collapse:collapse;font-family:Arial;font-size:14px">
       <thead>
         <tr style="background:#2c3e50;color:white">
@@ -52,86 +52,84 @@ def build_email_html(alerts: list[dict]) -> str:
           <th style="padding:8px">Cambio</th>
         </tr>
       </thead>
-      <tbody>{rows}</tbody>
+      <tbody>{filas}</tbody>
     </table>
     <p style="font-family:Arial;color:#7f8c8d;font-size:12px">
-      Generado automáticamente por Stock Monitor
+      Generado automáticamente por Monitor de Acciones
     </p>
     </body></html>"""
 
 
 
-def build_telegram_msg(alerts: list[dict]) -> str:
-    """Render a plain HTML-formatted Telegram message for all triggered alerts."""
-    today = date.today().strftime("%d/%m/%Y")
-    lines = [f"📊 <b>Alertas de Precio</b> – {today}\n"]
-    for a in alerts:
-        emoji = "🔴" if a["change_pct"] < 0 else "🟢"
-        lines.append(
-            f"{emoji} <b>{a['ticker']}</b>: {a['direction']} "
-            f"<b>{abs(a['change_pct']):.2f}%</b>  "
-            f"(Cierre ant.: {a['prev_close']:.2f} → Actual: {a['current']:.2f})"
+def construir_mensaje_telegram(alertas: list[dict]) -> str:
+    """Genera un mensaje de Telegram con formato HTML para todas las alertas disparadas."""
+    hoy = date.today().strftime("%d/%m/%Y")
+    lineas = [f"📊 <b>Alertas de Precio</b> – {hoy}\n"]
+    for a in alertas:
+        emoji = "🔴" if a["cambio_porcentaje"] < 0 else "🟢"
+        lineas.append(
+            f"{emoji} <b>{a['ticker']}</b>: {a['direccion']} "
+            f"<b>{abs(a['cambio_porcentaje']):.2f}%</b>  "
+            f"(Cierre ant.: {a['cierre_anterior']:.2f} → Actual: {a['precio_actual']:.2f})"
         )
-    return "\n".join(lines)
+    return "\n".join(lineas)
 
 
+# ── Envío de notificaciones ───────────────────────────────────────────────────
 
-
-# ── Senders ───────────────────────────────────────────────────────────────────
-
-def send_email(subject: str, body: str) -> bool:
+def enviar_email(asunto: str, cuerpo: str) -> bool:
     """
-    Send an HTML e-mail using the SMTP settings stored in *email_config*.
-    Returns True on success, False if disabled or on error.
+    Envía un email HTML usando la configuración SMTP almacenada en configuracion_email.
+    Devuelve True si tiene éxito, False si está desactivado o hay un error.
     """
-    cfg = get_email_config()
+    cfg = obtener_config_email()
     if not cfg:
-        log.info("Email notifications disabled or not configured.")
+        log.info("Notificaciones por email desactivadas o no configuradas.")
         return False
 
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"]    = cfg["from_addr"]
-        msg["To"]      = cfg["to_addr"]
-        msg.attach(MIMEText(body, "html", "utf-8"))
+        mensaje = MIMEMultipart("alternative")
+        mensaje["Subject"] = asunto
+        mensaje["From"]    = cfg["direccion_origen"]
+        mensaje["To"]      = cfg["direccion_destino"]
+        mensaje.attach(MIMEText(cuerpo, "html", "utf-8"))
 
-        with smtplib.SMTP(cfg["smtp_host"], cfg["smtp_port"]) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(cfg["username"], cfg["password"])
-            server.sendmail(cfg["from_addr"], cfg["to_addr"], msg.as_string())
+        with smtplib.SMTP(cfg["servidor_smtp"], cfg["puerto_smtp"]) as servidor:
+            servidor.ehlo()
+            servidor.starttls()
+            servidor.login(cfg["usuario"], cfg["password"])
+            servidor.sendmail(cfg["direccion_origen"], cfg["direccion_destino"], mensaje.as_string())
 
-        log.info("Email sent to %s", cfg["to_addr"])
+        log.info("Email enviado a %s", cfg["direccion_destino"])
         return True
 
     except Exception as exc:
-        log.error("Email error: %s", exc)
+        log.error("Error al enviar email: %s", exc)
         return False
 
 
-def send_telegram(message: str) -> bool:
+def enviar_telegram(mensaje: str) -> bool:
     """
-    Send a Telegram message via the Bot API using settings in *telegram_config*.
-    Returns True on success, False if disabled or on error.
+    Envía un mensaje de Telegram via Bot API usando la configuracion_telegram.
+    Devuelve True si tiene éxito, False si está desactivado o hay un error.
     """
-    cfg = get_telegram_config()
+    cfg = obtener_config_telegram()
     if not cfg:
-        log.info("Telegram notifications disabled or not configured.")
+        log.info("Notificaciones de Telegram desactivadas o no configuradas.")
         return False
 
     try:
-        url     = f"https://api.telegram.org/bot{cfg['bot_token']}/sendMessage"
-        payload = {"chat_id": cfg["chat_id"], "text": message, "parse_mode": "HTML"}
+        url     = f"https://api.telegram.org/bot{cfg['token_bot']}/sendMessage"
+        payload = {"chat_id": cfg["id_chat"], "text": mensaje, "parse_mode": "HTML"}
         resp    = requests.post(url, json=payload, timeout=10)
 
         if resp.ok:
-            log.info("Telegram message sent to chat %s", cfg["chat_id"])
+            log.info("Mensaje de Telegram enviado al chat %s", cfg["id_chat"])
             return True
 
-        log.error("Telegram API error: %s", resp.text)
+        log.error("Error en la API de Telegram: %s", resp.text)
         return False
 
     except Exception as exc:
-        log.error("Telegram error: %s", exc)
+        log.error("Error al enviar Telegram: %s", exc)
         return False

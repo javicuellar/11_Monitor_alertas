@@ -1,16 +1,16 @@
 """
-stock_monitor
-─────────────
-Stock & ETF price monitor package.
+monitor_acciones
+────────────────
+Paquete del monitor de precios de acciones y ETFs.
 
-Public re-exports for convenient one-line imports:
+Re-exportaciones públicas para importaciones cómodas en una sola línea:
 
-    from stock_monitor import run_scheduler, run_check
+    from stock_monitor import ejecutar_planificador, ejecutar_comprobacion
 """
 
-from .alerts import run_check
-from .database import init_db
-from .scheduler import run_scheduler
+from .alerts import ejecutar_comprobacion
+from .database import inicializar_bd
+from .scheduler import ejecutar_planificador
 
 
-__all__ = ["init_db", "run_check", "run_scheduler"]
+__all__ = ["inicializar_bd", "ejecutar_comprobacion", "ejecutar_planificador"]

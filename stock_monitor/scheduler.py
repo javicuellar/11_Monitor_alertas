@@ -1,90 +1,88 @@
 """
 scheduler.py
 ────────────
-Time-window guard and the main scheduler loop.
+Control de ventana horaria y bucle principal del planificador.
 
-The loop re-reads `scheduler_config` from the DB on every iteration,
-so any change made while the process is running takes effect on the
-next tick — no restart needed.
+El bucle relee `configuracion_planificador` desde la BD en cada iteración,
+por lo que cualquier cambio realizado mientras el proceso está en marcha
+surte efecto en el siguiente ciclo — sin necesidad de reiniciar.
 
-scheduler_config columns
-────────────────────────
-interval_minutes  – how often to run a check cycle          (default 30)
-start_time        – earliest allowed start time  HH:MM 24h  (default 09:00)
-end_time          – latest  allowed start time   HH:MM 24h  (default 22:00)
-weekdays_only     – 1 = skip Sat & Sun, 0 = run every day   (default 1)
+Columnas de configuracion_planificador
+───────────────────────────────────────
+intervalo_minutos – cada cuántos minutos ejecutar un ciclo      (por defecto 30)
+hora_inicio       – hora de inicio permitida más temprana HH:MM  (por defecto 09:00)
+hora_fin          – hora de inicio permitida más tardía  HH:MM  (por defecto 22:00)
+solo_laborables   – 1 = omitir sáb y dom, 0 = ejecutar todos los días (por defecto 1)
 """
 
 import time
 from datetime import datetime
 
-from alerts import run_check
-from config import get_logger
-from database import get_scheduler_config
+from alerts import ejecutar_comprobacion
+from config import obtener_logger
+from database import obtener_config_planificador
 
 
+log = obtener_logger(__name__)
 
-log = get_logger(__name__)
 
+# ── Funciones auxiliares ──────────────────────────────────────────────────────
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _parse_hhmm(hhmm: str) -> tuple[int, int]:
-    """Parse 'HH:MM' string into (hour, minute) integers."""
+def _parsear_hhmm(hhmm: str) -> tuple[int, int]:
+    """Convierte una cadena 'HH:MM' en una tupla (hora, minuto) de enteros."""
     h, m = hhmm.strip().split(":")
     return int(h), int(m)
 
 
-def is_active_window(cfg: dict) -> bool:
+def esta_en_ventana_activa(cfg: dict) -> bool:
     """
-    Return True if *now* falls within the configured check window.
+    Devuelve True si el momento actual está dentro de la ventana de comprobación configurada.
 
-    Checks:
-      - weekday constraint  (weekdays_only=1 skips Saturday=5 and Sunday=6)
-      - time-of-day window  [start_time, end_time] inclusive
+    Comprueba:
+      - Restricción de día laborable (solo_laborables=1 omite sábado=5 y domingo=6)
+      - Ventana horaria del día [hora_inicio, hora_fin] inclusive
     """
-    now = datetime.now()
+    ahora = datetime.now()
 
-    if cfg["weekdays_only"] and now.weekday() >= 5:
+    if cfg["solo_laborables"] and ahora.weekday() >= 5:
         return False
 
-    start_h, start_m = _parse_hhmm(cfg["start_time"])
-    end_h,   end_m   = _parse_hhmm(cfg["end_time"])
+    inicio_h, inicio_m = _parsear_hhmm(cfg["hora_inicio"])
+    fin_h,    fin_m    = _parsear_hhmm(cfg["hora_fin"])
 
-    start_dt = now.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
-    end_dt   = now.replace(hour=end_h,   minute=end_m,   second=0, microsecond=0)
+    inicio_dt = ahora.replace(hour=inicio_h, minute=inicio_m, second=0, microsecond=0)
+    fin_dt    = ahora.replace(hour=fin_h,    minute=fin_m,    second=0, microsecond=0)
 
-    return start_dt <= now <= end_dt
+    return inicio_dt <= ahora <= fin_dt
 
 
+# ── Bucle principal ───────────────────────────────────────────────────────────
 
-# ── Main loop ─────────────────────────────────────────────────────────────────
-
-def run_scheduler() -> None:
+def ejecutar_planificador() -> None:
     """
-    Infinite loop that fires run_check() whenever the current moment
-    is inside the configured active window.
+    Bucle infinito que ejecuta ejecutar_comprobacion() cuando el momento actual
+    está dentro de la ventana activa configurada.
 
-    Configuration is reloaded from the DB on every iteration.
+    La configuración se recarga desde la BD en cada iteración.
     """
-    log.info("=== Scheduler arrancado ===")
+    log.info("=== Planificador arrancado ===")
 
     while True:
-        cfg              = get_scheduler_config()
-        interval_seconds = cfg["interval_minutes"] * 60
+        cfg               = obtener_config_planificador()
+        segundos_intervalo = cfg["intervalo_minutos"] * 60
 
-        if is_active_window(cfg):
+        if esta_en_ventana_activa(cfg):
             try:
-                run_check()
+                ejecutar_comprobacion()
             except Exception as exc:
-                log.error("Error inesperado en run_check: %s", exc)
+                log.error("Error inesperado en ejecutar_comprobacion: %s", exc)
         else:
             log.info(
                 "Fuera de ventana horaria (%s–%s, solo_laborables=%s). "
                 "Próximo ciclo en %d min.",
-                cfg["start_time"], cfg["end_time"],
-                cfg["weekdays_only"], cfg["interval_minutes"],
+                cfg["hora_inicio"], cfg["hora_fin"],
+                cfg["solo_laborables"], cfg["intervalo_minutos"],
             )
 
-        log.info("Durmiendo %d minutos…", cfg["interval_minutes"])
-        time.sleep(interval_seconds)
+        log.info("Durmiendo %d minutos…", cfg["intervalo_minutos"])
+        time.sleep(segundos_intervalo)

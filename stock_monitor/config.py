@@ -1,7 +1,7 @@
 """
 config.py
 ─────────
-Global constants and logging configuration shared by all modules.
+Constantes globales y configuración de logging compartidas por todos los módulos.
 """
 
 import logging
@@ -9,9 +9,11 @@ import os
 import sys
 
 
+# ── Ruta de la base de datos ───────────────────────────────────────────────────
+RUTA_BD: str = os.environ.get("RUTA_BD", "/data/monitor.db")
 
-# ── Database path ─────────────────────────────────────────────────────────────
-DB_PATH: str = os.environ.get("DB_PATH", "/data/monitor.db")
+# Alias para mantener compatibilidad si se usa la variable de entorno DB_PATH
+DB_PATH = RUTA_BD
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -22,6 +24,6 @@ logging.basicConfig(
 )
 
 
-def get_logger(name: str) -> logging.Logger:
-    """Return a module-level logger with a consistent format."""
-    return logging.getLogger(name)
+def obtener_logger(nombre: str) -> logging.Logger:
+    """Devuelve un logger a nivel de módulo con un formato consistente."""
+    return logging.getLogger(nombre)
